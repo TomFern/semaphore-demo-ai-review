@@ -12,3 +12,5 @@ blocks:
           commands:
             - checkout
             - ./ai-review
+      secrets:
+        - name: openai-tomfern
