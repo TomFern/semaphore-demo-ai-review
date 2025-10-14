@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OUT_XML=$1
+
+# --- config (keep minimal as you requested) ---
+FILE_LIMIT=1000
+# FILES=$(git diff --name-only "$SEMAPHORE_GIT_COMMIT_RANGE" | head -n $FILE_LIMIT)
+
+# text (test single file like you had)
+FILES="src/app.js"
+
+# Build a JSON array of {"filename": "...", "content": "..."} objects
+# original approach: produce comma-separated objects then wrap with [ ... ]
+FILE_BLOCKS=$(for f in $FILES; do
+  # protect if file doesn't exist
+  if [ ! -f "$f" ]; then
+    continue
+  fi
+  CONTENT=$(head -c 40000 "$f" | jq -Rs .) # truncate long files, encode as JSON string
+  echo "{\"filename\": \"${f}\", \"content\": ${CONTENT}},"
+done | sed '$s/,$//') # drop last comma
+
+# wrap into a JSON array string
+FILE_BLOCKS_JSON="[$FILE_BLOCKS]"
+
+MODEL="gpt-4o-mini-2024-07-18"
+
+# --- require OPENAI_API_KEY from env (do NOT hardcode) ---
+: "${OPENAI_API_KEY:?Please set OPENAI_API_KEY in the environment (do NOT hardcode it)}"
+
+# Build request body using jq to avoid hand-escaping issues
+SYSTEM_PROMPT="You are a senior code reviewer. Review each file for quality and security issues. Respond only using valid JUnit XML format file."
+USER_INTRO="Here are the changed files with content (JSON array named 'files'):\n$FILE_BLOCKS_JSON"
+
+BODY=$(jq -n \
+  --arg model "$MODEL" \
+  --arg sys "$SYSTEM_PROMPT" \
+  --arg user "$USER_INTRO" \
+  '{
+  model: $model,
+  temperature: 0,
+  input: [
+    { role: "system", content: [ { type: "input_text", text: $sys } ] },
+    { role: "user", content: [ { type: "input_text", text: $user } ] }
+  ]
+}')
+
+# -- call OpenAI Responses API --
+RESP_JSON=$(curl -sS https://api.openai.com/v1/responses \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "$BODY" | sed 's/```xml//' | sed 's/```//' | sed '/^$/d')
+
+# Extract the model's text output (the JUnit XML you asked for)
+XML_TEXT=$(echo "$RESP_JSON" | jq -r 'try .output[0].content[0].text // .output_text // empty')
+
+if [ -z "$XML_TEXT" ]; then
+  echo "ERROR: No text output from OpenAI. Full response below:"
+  echo "$RESP_JSON" | jq .
+  exit 3
+fi
+
+# Save to file
+printf "%s" "$XML_TEXT" >"$OUT_XML"
+echo "[ai] wrote $OUT_XML"
+
+# done
+echo "[ai] finished successfully"
