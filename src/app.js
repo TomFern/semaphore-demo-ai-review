@@ -1,6 +1,7 @@
 // vulnerable.js
 // Intentional insecure code for CI/security-scan testing ONLY.
 // Contains: hardcoded secret, command injection, eval usage, SQL string concatenation.
+// test
 
 const express = require('express');
 const bodyParser = require('body-parser');
