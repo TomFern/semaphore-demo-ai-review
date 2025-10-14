@@ -5,11 +5,10 @@ agent:
     type: f1-standard-2
     os_image: ubuntu2204
 blocks:
-  - name: 'Code Review'
+  - name: Code Review!
     task:
       jobs:
-        - name: 'AI Review'
+        - name: AI Review
           commands:
             - checkout
             - ./ai-review
-
