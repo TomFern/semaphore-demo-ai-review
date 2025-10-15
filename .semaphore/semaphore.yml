@@ -13,8 +13,6 @@ blocks:
             - checkout
             - ./ai-review report.xml
             - '[[ -f report.xml ]] && test-results publish report.xml'
-      secrets:
-        - name: openai-tomfern
 after_pipeline:
   task:
     jobs:
